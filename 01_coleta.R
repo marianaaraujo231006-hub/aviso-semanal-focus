@@ -20,12 +20,6 @@ ipca_raw |>
   arrange(desc(Data)) |>
   head(10)
 
-ipca_raw |>
-  filter(DataReferencia == "2026", baseCalculo == 0) |>
-  select(Data, DataReferencia, Mediana, baseCalculo) |>
-  arrange(desc(Data)) |>
-  head(10)
-
 selic_raw <- get_market_expectations(
   type = "selic",
   start_date = "2026-01-01"
@@ -45,3 +39,11 @@ selic_raw |>
 
 ?get_market_expectations
 
+ipca_raw |>
+  filter(
+    DataReferencia == "2026",
+    baseCalculo == 0
+  ) |>
+  distinct(Data) |>
+  arrange(desc(Data)) |>
+  head(20)
