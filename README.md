@@ -4,9 +4,9 @@ Projeto desenvolvido para a disciplina **REC3302 — Introdução a R**, da Facu
 
 ## 1. Sobre o projeto
 
-O Aviso Semanal Focus tem como objetivo coletar, organizar e comparar as expectativas de mercado divulgadas pelo Banco Central do Brasil, permitindo identificar mudanças nas projeções econômicas entre divulgações semanais consecutivas.
+O Aviso Semanal Focus tem como objetivo coletar, organizar e comparar as expectativas de mercado divulgadas pelo Banco Central do Brasil a fins de identificar mudanças nas projeções econômicas entre divulgações semanais consecutivas.
 
-Nesta etapa, o projeto utiliza dados de expectativas para o IPCA e a taxa Selic. O processamento é realizado em R, com a finalidade de padronizar as comparações e fornecer informações que poderão subsidiar a elaboração de um boletim econômico semanal.
+Nesta etapa o projeto utiliza dados de expectativas para o IPCA e a taxa Selic. O processamento é realizado em R, com a finalidade de padronizar as comparações e fornecer informações que poderão subsidiar a elaboração de um boletim econômico semanal.
 
 ## 2. Fonte dos dados
 
