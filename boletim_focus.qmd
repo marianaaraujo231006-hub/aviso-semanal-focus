@@ -1,0 +1,92 @@
+---
+title: "Aviso Semanal Focus — Boletim Automatizado"
+subtitle: "REC3302 — Introdução a R (FEA-RP/USP)"
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-title: "Sumário"
+    code-fold: true
+    embed-resources: true
+lang: pt-BR
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+source('03_automatização.R')
+```
+
+## 1. Destaques da Semana
+
+`r textos_focus$abertura`
+
+```{r frases_automaticas, results='asis'}
+for (f in textos_focus$frases) {
+  cat(gsub('^• ', '- ', f), '\n')
+}
+```
+
+## 2. Tabela Comparativa
+
+```{r tabela_comparativa}
+tabela_comparativa
+```
+
+## 3. Evolução Semanal das Expectativas
+
+::: {.panel-tabset}
+
+### IPCA
+
+```{r grafico_ipca, fig.width=8, fig.height=4.5}
+grafico_ipca
+```
+
+### Selic
+
+```{r grafico_selic, fig.width=8, fig.height=4.5}
+grafico_selic
+```
+
+```{r graficos_extras, results='asis', fig.width=8, fig.height=4.5}
+if (!is.null(grafico_pib)) {
+  cat('### PIB Total\n\n')
+  print(grafico_pib)
+  cat('\n\n')
+}
+if (!is.null(grafico_cambio)) {
+  cat('### Câmbio\n\n')
+  print(grafico_cambio)
+  cat('\n\n')
+}
+```
+
+:::
+
+## 4. Parâmetros e Ajustes Metodológicos
+
+```{r tabela_parametros}
+data.frame(
+  Parametro = c(
+    'Ano de referência (indicadores anuais)',
+    'Reunião de referência da Selic',
+    'Base de cálculo (0 = 30 dias, 1 = 5 dias)',
+    'Limite de estabilidade — taxas (p.p.)',
+    'Limite de estabilidade — câmbio (R$)',
+    'Janela histórica dos gráficos (dias)'
+  ),
+  Valor_Atual = c(
+    as.character(ANO_REF_ANUAL),
+    as.character(REUNIAO_REF_SELIC),
+    as.character(BASE_CALCULO),
+    fmt_br(LIMITE_ESTABILIDADE_PP, 2),
+    fmt_br(LIMITE_ESTABILIDADE_BRL, 2),
+    as.character(JANELA_DIAS_GRAFICO)
+  )
+) |>
+  gt() |>
+  cols_label(Parametro = 'Parâmetro configurável', Valor_Atual = 'Valor utilizado')
+```

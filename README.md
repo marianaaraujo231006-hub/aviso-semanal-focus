@@ -4,9 +4,9 @@ Projeto desenvolvido para a disciplina **REC3302 — Introdução a R**, da Facu
 
 ## 1. Sobre o projeto
 
-O Aviso Semanal Focus tem como objetivo coletar, organizar e comparar as expectativas de mercado divulgadas pelo Banco Central do Brasil, a fim de identificar mudanças nas projeções econômicas entre divulgações semanais.
+O Aviso Semanal Focus tem como objetivo coletar, organizar, comparar e automatizar a comunicação das expectativas de mercado divulgadas pelo Banco Central do Brasil, a fim de identificar mudanças nas projeções econômicas entre divulgações semanais e gerar um boletim econômico reprodutível.
 
-Nesta etapa, o projeto utiliza dados de expectativas para o IPCA e a taxa Selic. O processamento é realizado em R, com a finalidade de padronizar as comparações e fornecer informações que poderão subsidiar a elaboração de um boletim econômico semanal.
+O projeto processa dados de expectativas para o **IPCA** e a **taxa Selic**, além de permitir a ampliação automática para o **PIB Total** e a **taxa de Câmbio**. Todo o fluxo é realizado em R e consolidado em um documento Quarto (`boletim_focus.qmd`) com textos analíticos gerados dinamicamente via `glue()`, tabela comparativa e gráficos de evolução semanal.
 
 ## 2. Fonte dos dados
 
@@ -18,10 +18,12 @@ https://olinda.bcb.gov.br/olinda/servico/Expectativas/versao/v1/documentacao#Exp
 
 **Indicadores trabalhados:**
 
-- **IPCA:** expectativas de inflação para o ano de referência de 2026.
-- **Selic:** expectativas para a reunião do Copom identificada como `R6/2028`.
+- **IPCA:** expectativas de inflação para o ano de referência de 2026 (`%`).
+- **Selic:** expectativas para a reunião do Copom identificada como `R6/2028` (`%`).
+- **PIB Total (ampliação):** expectativas de crescimento do PIB para o ano de referência de 2026 (`%`).
+- **Câmbio (ampliação):** expectativas para a taxa de câmbio ao final do ano de referência de 2026 (`R$/US$`).
 
-Para manter a comparabilidade entre as observações, as análises utilizam `baseCalculo == 0`.
+Para manter a comparabilidade entre as observações, as análises utilizam por padrão `baseCalculo == 0` (podendo ser ajustado nos parâmetros do script de automatização).
 
 ## 3. Estrutura do projeto
 
@@ -29,31 +31,36 @@ Para manter a comparabilidade entre as observações, as análises utilizam `bas
 aviso-semanal-focus/
 ├── 01_coleta.R
 ├── 02_tratamento.R
+├── 03_automatização.R
+├── boletim_focus.qmd
 ├── README.md
 └── dados/
     ├── ipca_raw.csv
-    └── selic_raw.csv
+    ├── selic_raw.csv
+    ├── pib_raw.csv       
+    └── cambio_raw.csv    
 ```
 
 ### Descrição dos arquivos
 
 - `01_coleta.R`: consulta as expectativas de mercado do Banco Central e salva os dados brutos de IPCA e Selic em arquivos CSV.
 - `02_tratamento.R`: importa os arquivos coletados, organiza as observações por semana, compara as medianas das expectativas, calcula as variações, gera uma tabela comparativa e constrói gráficos de evolução semanal.
+- `03_automatização.R`: centraliza parâmetros de ajuste rápido (feedback da sala), amplia a coleta e o tratamento para PIB Total e Câmbio, gera textos e frases analíticas automáticas com `glue()`, consolida a tabela comparativa e os gráficos, e monta o documento Quarto (`boletim_focus.qmd`).
+- `boletim_focus.qmd`: documento Quarto que integra as frases automáticas, a tabela comparativa (`gt`), os gráficos em abas interativas (`ggplot2`) e o quadro de parâmetros metodológicos.
 - `dados/ipca_raw.csv`: base bruta de expectativas do IPCA.
 - `dados/selic_raw.csv`: base bruta de expectativas da Selic.
+- `dados/pib_raw.csv` e `dados/cambio_raw.csv`: bases brutas de PIB Total e Câmbio coletadas complementarmente pelo script de automatização.
 
-Os arquivos CSV preservam os dados coletados, enquanto o script de tratamento realiza as operações necessárias para a análise.
-
-## 4. Metodologia de tratamento e comparação
+## 4. Metodologia de tratamento, comparação e automatização
 
 A análise considera as duas semanas mais recentes com dados disponíveis para cada indicador.
 
-Para identificar as observações utilizadas na comparação, o script:
+Para identificar as observações utilizadas na comparação, os scripts:
 
-1. Importa os arquivos CSV e converte a variável `Data` para o formato de data.
-2. Identifica as semanas de divulgação utilizando o padrão de semana e ano (`%G-%V`).
-3. Seleciona a data mais recente disponível dentro de cada semana.
-4. Ordena as semanas e seleciona as duas mais recentes para realizar a comparação.
+1. Importam os arquivos CSV e convertem a variável `Data` para o formato de data.
+2. Identificam as semanas de divulgação utilizando o padrão de semana e ano (`%G-%V`).
+3. Selecionam a data mais recente disponível dentro de cada semana.
+4. Ordenam as semanas e selecionam as duas mais recentes para realizar a comparação.
 
 Dessa forma, a seleção não depende obrigatoriamente de uma divulgação em um dia específico da semana. É utilizada a última observação disponível em cada uma das semanas selecionadas.
 
@@ -61,7 +68,10 @@ Dessa forma, a seleção não depende obrigatoriamente de uma divulgação em um
 
 A variação da mediana é calculada pela diferença entre a mediana da divulgação mais recente e a mediana da divulgação anterior:
 
-**Variação (p.p.) = Mediana atual − Mediana anterior**
+**Variação = Mediana atual − Mediana anterior**
+
+- Para IPCA, Selic e PIB Total, a variação é expressa em **pontos percentuais (p.p.)**.
+- Para a taxa de Câmbio, a variação é expressa em **R$/US$**.
 
 O script também calcula a variação do número de respondentes:
 
@@ -69,50 +79,66 @@ O script também calcula a variação do número de respondentes:
 
 ### 4.2. Classificação das expectativas
 
-A classificação utiliza um limite provisório de 0,05 ponto percentual:
+Por padrão, a classificação utiliza os seguintes limites de estabilidade (configuráveis em `03_automatização.R`):
 
-- **Subiu:** variação superior a +0,05 p.p.
-- **Caiu:** variação inferior a −0,05 p.p.
-- **Estável:** variação entre −0,05 p.p. e +0,05 p.p., inclusive.
+- **Indicadores em taxa (IPCA, Selic e PIB Total) — limite de 0,05 p.p.:**
+  - **Subiu:** variação superior a +0,05 p.p.
+  - **Caiu:** variação inferior a −0,05 p.p.
+  - **Estável:** variação entre −0,05 p.p. e +0,05 p.p., inclusive.
+- **Taxa de Câmbio — limite de R$ 0,02:**
+  - **Subiu:** variação superior a +R$ 0,02.
+  - **Caiu:** variação inferior a −R$ 0,02.
+  - **Estável:** variação entre −R$ 0,02 e +R$ 0,02, inclusive.
 
-A classificação é aplicada à variação da mediana das expectativas.
+### 4.3. Geração de frases automáticas com `glue()`
 
-Na primeira observação da comparação, a variação não é calculada por não existir uma observação anterior dentro do conjunto selecionado.
+No script `03_automatização.R`, as funções `gerar_frase_indicador()` e `gerar_textos_boletim()` utilizam o pacote `glue` (`glue()` e `glue_collapse()`) para transformar os resultados numéricos da tabela de resumo em frases analíticas padronizadas em português (com formatação decimal brasileira).
 
-### 4.3. Organização dos resultados
+Para cada indicador, o texto gerado informa automaticamente:
 
-Após os cálculos, o script organiza os resultados em uma tabela comparativa, utilizando o pacote `gt`.
+- Indicador e período/reunião de referência;
+- Datas e semanas das divulgações comparadas;
+- Comportamento da expectativa (`apresentou alta`, `apresentou queda` ou `manteve-se estável`);
+- Mediana anterior, mediana atual e variação no período;
+- Evolução do número de instituições respondentes.
 
-A tabela apresenta:
+### 4.4. Organização da tabela comparativa
+
+Os resultados consolidados são apresentados em uma tabela formatada com o pacote `gt`, contendo:
 
 - Indicador e período de referência;
-- Semana e data da divulgação anterior;
-- Semana e data da divulgação atual;
+- Semana e data da divulgação anterior e atual;
 - Mediana anterior e mediana atual;
 - Número de respondentes em cada divulgação;
-- Variação da mediana em pontos percentuais;
-- Variação do número de respondentes;
+- Variação da mediana e variação do número de respondentes;
 - Classificação da tendência.
+
+### 4.5. Parâmetros ajustáveis (Feedback da Sala)
+
+Na seção inicial de `03_automatização.R`, foram isolados parâmetros globais para permitir ajustes rápidos a partir das discussões e sugestões em sala de aula:
+
+- `ANO_REF_ANUAL`: ano de referência para IPCA, PIB Total e Câmbio (padrão `"2026"`);
+- `REUNIAO_REF_SELIC`: reunião do Copom para a Selic (padrão `"R6/2028"`);
+- `BASE_CALCULO`: base de cálculo do Focus (`0` para 30 dias; `1` para 5 dias);
+- `LIMITE_ESTABILIDADE_PP` e `LIMITE_ESTABILIDADE_BRL`: limites para classificação de tendência;
+- `JANELA_DIAS_GRAFICO`: horizonte histórico exibido nos gráficos semanais (padrão `180` dias);
+- `INCLUIR_PIB_CAMBIO`: chave lógica (`TRUE`/`FALSE`) para incluir ou ocultar PIB Total e Câmbio;
+- `COR_LINHA_GRAFICO` e `COR_PONTO_GRAFICO`: personalização visual dos gráficos.
 
 ## 5. Visualização da evolução semanal
 
-Além da comparação entre as duas semanas mais recentes, o script `02_tratamento.R` gera dois gráficos de evolução das expectativas:
+Os scripts `02_tratamento.R` e `03_automatização.R` constroem gráficos de evolução semanal com o pacote `ggplot2`:
 
-- **Gráfico do IPCA:** apresenta a evolução semanal das expectativas de inflação para 2026.
-- **Gráfico da Selic:** apresenta a evolução semanal das expectativas para a reunião R6/2028.
+- **Gráfico do IPCA:** evolução semanal das expectativas de inflação para 2026.
+- **Gráfico da Selic:** evolução semanal das expectativas para a reunião R6/2028.
+- **Gráfico do PIB Total:** evolução semanal das expectativas de crescimento do PIB para 2026.
+- **Gráfico do Câmbio:** evolução semanal das expectativas para a taxa de câmbio (R$/US$) em 2026.
 
-Os gráficos são construídos com o pacote `ggplot2`, utilizando:
-
-- A data da divulgação no eixo horizontal;
-- A mediana da expectativa no eixo vertical;
-- Linhas para representar a evolução das expectativas;
-- Pontos para identificar cada observação semanal.
-
-Para essa visualização, são considerados os últimos 180 dias disponíveis na base. Dentro de cada semana, é selecionada a observação de data mais recente.
+Nos gráficos são considerados os últimos 180 dias disponíveis na base, selecionando-se a observação de data mais recente dentro de cada semana.
 
 ## 6. Resultados da execução
 
-Na comparação entre 16 e 23 de outubro de 2026, os arquivos locais produziram os seguintes resultados:
+Na comparação entre 16 e 23 de outubro de 2026, os arquivos locais de IPCA e Selic produziram os seguintes resultados:
 
 | Indicador | Mediana anterior | Mediana atual | Variação | Classificação |
 |---|---:|---:|---:|---|
@@ -124,7 +150,7 @@ Na comparação entre 16 e 23 de outubro de 2026, os arquivos locais produziram 
 - **IPCA:** aumento de 5 respondentes, de 137 para 142.
 - **Selic:** aumento de 10 respondentes, de 95 para 105.
 
-Os resultados são referentes à execução registrada nesta etapa e não representam necessariamente as expectativas mais recentes disponíveis.
+*(Ao executar `03_automatização.R` com conexão à internet, a tabela e as frases passam a incorporar também os resultados atualizados de **PIB Total** e **Câmbio**).*
 
 ## 7. Requisitos e dependências
 
@@ -136,14 +162,14 @@ O projeto utiliza os seguintes pacotes:
 | `dplyr` | Manipulação, organização e tratamento dos dados. |
 | `gt` | Construção e formatação da tabela comparativa. |
 | `ggplot2` | Construção dos gráficos de evolução semanal. |
+| `glue` | Geração de textos e frases analíticas automáticas. |
+| `quarto` | *(Opcional)* Renderização programática do boletim em HTML via R. |
 
 Para instalar os pacotes necessários, execute no R:
 
 ```r
-install.packages(c("rbcb", "dplyr", "gt", "ggplot2"))
+install.packages(c("rbcb", "dplyr", "gt", "ggplot2", "glue", "quarto"))
 ```
-
-A instalação precisa ser realizada apenas uma vez no ambiente R, salvo necessidade de reinstalação.
 
 ## 8. Como executar o projeto
 
@@ -151,15 +177,15 @@ Os scripts devem ser executados na ordem apresentada abaixo.
 
 ### 8.1. Coleta dos dados
 
-No Positron, execute:
+No Positron / RStudio, execute:
 
 ```r
 source("01_coleta.R")
 ```
 
-Esse script consulta as expectativas de mercado do Banco Central e grava os arquivos CSV na pasta `dados/`.
+Esse script consulta as expectativas de mercado do Banco Central e grava os arquivos CSV iniciais (`ipca_raw.csv` e `selic_raw.csv`) na pasta `dados/`.
 
-### 8.2. Tratamento e comparação
+### 8.2. Tratamento e comparação inicial
 
 Após a coleta, execute:
 
@@ -167,38 +193,37 @@ Após a coleta, execute:
 source("02_tratamento.R")
 ```
 
-Esse script importa os arquivos CSV e realiza o tratamento das bases. Ao final da execução, são geradas:
+### 8.3. Automatização, frases com `glue()` e documento Quarto
 
-- As tabelas de comparação semanal do IPCA e da Selic;
-- A tabela comparativa formatada com `gt`;
-- O gráfico de evolução semanal do IPCA;
-- O gráfico de evolução semanal da Selic.
+Em seguida, execute:
 
-A coleta deve ser executada antes do tratamento para garantir que os arquivos utilizados estejam disponíveis e atualizados.
+```r
+source("03_automatização.R")
+```
 
-## 9. Implementações realizadas e próximas etapas
+Esse script:
 
-O projeto encontra-se em desenvolvimento. Até esta etapa, foram implementadas as seguintes funcionalidades:
+1. Coleta automaticamente os dados de **PIB Total** e **Câmbio** (caso ainda não estejam salvos em `dados/`);
+2. Calcula as variações e tendências para todos os indicadores ativos;
+3. Imprime no console a síntese e as frases automáticas geradas com `glue()`;
+4. Gera a tabela comparativa consolidada (`gt`) e os gráficos semanais (`ggplot2`);
+5. Monta e atualiza o arquivo `boletim_focus.qmd`.
 
-- Coleta das expectativas de mercado do IPCA e da Selic por meio da API do Banco Central;
-- Armazenamento das bases brutas em arquivos CSV;
-- Identificação das duas semanas mais recentes com observações disponíveis;
-- Seleção da última divulgação disponível em cada semana;
+Para gerar o relatório final em HTML, abra o arquivo `boletim_focus.qmd` no Positron ou RStudio e clique em **Render** (ou execute `quarto::quarto_render("boletim_focus.qmd")` no console).
+
+## 9. Implementações realizadas
+
+Até esta etapa, foram implementadas as seguintes funcionalidades:
+
+- Coleta das expectativas de mercado de IPCA, Selic, PIB Total e Câmbio por meio da API do Banco Central;
+- Armazenamento das bases brutas em arquivos CSV na pasta `dados/`;
+- Identificação das duas semanas mais recentes com observações disponíveis e seleção da última divulgação de cada semana;
 - Cálculo da variação das medianas e do número de respondentes;
-- Classificação automática das alterações nas expectativas;
-- Geração de tabela comparativa formatada;
-- Construção de gráficos de evolução semanal dos indicadores.
-
-**Observações metodológicas:** a classificação utiliza um limite provisório de 0,05 p.p., que poderá ser revisto após a validação metodológica. A utilização de `baseCalculo == 0` também integra os critérios experimentais adotados nesta etapa.
-
-**Próximas etapas previstas:**
-
-- Aprimoramento da metodologia de tratamento e comparação;
-- Desenvolvimento da interpretação econômica dos resultados;
-- Elaboração do boletim econômico semanal;
-- Implementação de outras funcionalidades previstas para o projeto.
-
-A interpretação econômica e a elaboração do boletim ainda não fazem parte das funcionalidades implementadas nesta versão.
+- Classificação automática das alterações nas expectativas com limites parametrizáveis;
+- Geração automática de frases analíticas e resumo executivo utilizando `glue()`;
+- Geração de tabela comparativa formatada (`gt`) e gráficos de evolução semanal (`ggplot2`);
+- Montagem de documento Quarto (`boletim_focus.qmd`) com abas para visualização do boletim completo;
+- Estruturação de bloco de parâmetros no início do script para incorporação imediata de ajustes e feedbacks da sala.
 
 ## 10. Referências
 
