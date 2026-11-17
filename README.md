@@ -1,209 +1,120 @@
-# Aviso Semanal Focus
-
-Projeto desenvolvido para a disciplina **REC3302 — Introdução a R**, da Faculdade de Economia, Administração e Contabilidade de Ribeirão Preto (FEA-RP/USP).
 
 ## 1. Sobre o projeto
 
-O Aviso Semanal Focus tem como objetivo coletar, organizar e comparar as expectativas de mercado divulgadas pelo Banco Central do Brasil, a fim de identificar mudanças nas projeções econômicas entre divulgações semanais.
+O Aviso Semanal Focus coleta as expectativas de mercado divulgadas pelo Banco Central do Brasil (Relatório Focus) e compara a divulgação mais recente com a da semana anterior, para responder à pergunta: **o que mudou nas expectativas desta semana?**
 
-Nesta etapa, o projeto utiliza dados de expectativas para o IPCA e a taxa Selic. O processamento é realizado em R, com a finalidade de padronizar as comparações e fornecer informações que poderão subsidiar a elaboração de um boletim econômico semanal.
+O projeto tem caráter aplicado e didático. Ele não estima modelos nem faz previsões próprias: apenas organiza e compara as expectativas já divulgadas pelo Banco Central.
+
+Nesta etapa, o projeto trabalha com **IPCA** e **Selic**. PIB e câmbio estão previstos para etapas futuras.
 
 ## 2. Fonte dos dados
 
-Os dados são obtidos do Sistema Expectativas de Mercado do Banco Central do Brasil, por meio do pacote `rbcb` e da função `get_market_expectations()`.
+Os dados vêm do Sistema Expectativas de Mercado do Banco Central do Brasil, pelo pacote `rbcb` e pela função `get_market_expectations()`.
 
-**Documentação da API do Banco Central — Expectativas de Mercado:**
+Indicadores e períodos de referência:
 
-https://olinda.bcb.gov.br/olinda/servico/Expectativas/versao/v1/documentacao#ExpectativasMercadoAnuais
+- **IPCA:** expectativa para o ano de 2026 (parâmetro `ano_ipca`).
+- **Selic:** expectativa para a **próxima reunião do Copom**, escolhida automaticamente pelo código. É a reunião mais próxima no calendário entre as que ainda têm expectativas atualizadas. Quando uma reunião acontece, o código passa a usar a seguinte, sem alteração manual.
 
-**Indicadores trabalhados:**
-
-- **IPCA:** expectativas de inflação para o ano de referência de 2026.
-- **Selic:** expectativas para a reunião do Copom identificada como `R6/2028`.
-
-Para manter a comparabilidade entre as observações, as análises utilizam `baseCalculo == 0`.
+Todas as análises usam `baseCalculo == 0`, para manter a comparabilidade.
 
 ## 3. Estrutura do projeto
 
-```text
+```
 aviso-semanal-focus/
+├── 00_exploracao.R
 ├── 01_coleta.R
 ├── 02_tratamento.R
+├── 03_visualizacao.R
 ├── README.md
-└── dados/
-    ├── ipca_raw.csv
-    └── selic_raw.csv
+├── dados/
+│   ├── ipca_raw.csv
+│   └── selic_raw.csv
+└── saidas/
+    ├── comparacao_semanal.csv
+    ├── tabela_comparativa.html
+    ├── grafico_ipca.png
+    └── grafico_selic.png
 ```
 
-### Descrição dos arquivos
+- `00_exploracao.R`: exploração da estrutura dos dados e verificações de qualidade (valores faltantes, repetições, intervalos entre datas, reuniões do Copom ainda ativas). Não é necessário para gerar o aviso.
+- `01_coleta.R`: consulta o Banco Central e grava os dados brutos em `dados/`.
+- `02_tratamento.R`: lê os dados brutos, compara as duas últimas semanas de cada indicador e grava a tabela final em `saidas/comparacao_semanal.csv`.
+- `03_visualizacao.R`: lê a tabela de comparação e gera a tabela formatada e os gráficos de evolução semanal.
+- `dados/`: bases brutas, sem alterações em relação ao que o Banco Central devolveu.
+- `saidas/`: resultados do tratamento e da visualização, que alimentam o documento em Quarto.
 
-- `01_coleta.R`: consulta as expectativas de mercado do Banco Central e salva os dados brutos de IPCA e Selic em arquivos CSV.
-- `02_tratamento.R`: importa os arquivos coletados, organiza as observações por semana, compara as medianas das expectativas, calcula as variações, gera uma tabela comparativa e constrói gráficos de evolução semanal.
-- `dados/ipca_raw.csv`: base bruta de expectativas do IPCA.
-- `dados/selic_raw.csv`: base bruta de expectativas da Selic.
+## 4. Metodologia de comparação
 
-Os arquivos CSV preservam os dados coletados, enquanto o script de tratamento realiza as operações necessárias para a análise.
+1. Para cada indicador, o código seleciona a **última divulgação de cada semana** (semana ISO) e fica com as **duas semanas mais recentes**.
+2. As duas divulgações precisam ser **consecutivas**. Se houver menos de duas semanas disponíveis, ou se as datas estiverem a mais de 10 dias uma da outra, o código emite um aviso e **não faz a comparação**.
+3. A variação é a diferença entre as medianas, calculada com `lag()`:
 
-## 4. Metodologia de tratamento e comparação
+   **Variação (p.p.) = Mediana atual − Mediana anterior**
 
-A análise considera as duas semanas mais recentes com dados disponíveis para cada indicador.
+4. A classificação usa um limiar provisório de **0,05 ponto percentual** (parâmetro `limiar_pp`):
+   - **subiu:** variação maior que +0,05 p.p.
+   - **caiu:** variação menor que −0,05 p.p.
+   - **estável:** variação entre −0,05 e +0,05 p.p., inclusive.
 
-Para identificar as observações utilizadas na comparação, o script:
+A variação é arredondada em 4 casas decimais antes da classificação, para evitar erros de arredondamento do computador.
 
-1. Importa os arquivos CSV e converte a variável `Data` para o formato de data.
-2. Identifica as semanas de divulgação utilizando o padrão de semana e ano (`%G-%V`).
-3. Seleciona a data mais recente disponível dentro de cada semana.
-4. Ordena as semanas e seleciona as duas mais recentes para realizar a comparação.
+## 5. Resultado da execução
 
-Dessa forma, a seleção não depende obrigatoriamente de uma divulgação em um dia específico da semana. É utilizada a última observação disponível em cada uma das semanas selecionadas.
+Comparação entre as divulgações de 6 e 13 de novembro de 2026:
 
-### 4.1. Cálculo das variações
+| Indicador | Referência | Mediana anterior | Mediana atual | Variação | Tendência |
+|---|---|---:|---:|---:|---|
+| IPCA | 2026 | 5,2195% | 5,1082% | −0,1113 p.p. | caiu |
+| Selic | R8/2026 | 13,75% | 13,75% | 0,0000 p.p. | estável |
 
-A variação da mediana é calculada pela diferença entre a mediana da divulgação mais recente e a mediana da divulgação anterior:
+Estes números correspondem à execução registrada acima e podem não refletir as expectativas mais recentes. Para atualizar, execute os scripts novamente (seção 7).
 
-**Variação (p.p.) = Mediana atual − Mediana anterior**
+## 6. Validação
 
-O script também calcula a variação do número de respondentes:
+A lógica foi testada com semanas passadas, usando `data_corte <- "2026-10-23"`. Na comparação entre 16 e 23 de outubro de 2026, o IPCA 2026 passou de 5,2190% para 5,1891% (variação de −0,0299 p.p., classificada como estável), valores iguais aos da primeira versão do projeto. Nessa data, a reunião da Selic escolhida foi a `R7/2026`.
 
-**Variação de respondentes = Respondentes atuais − Respondentes anteriores**
+A conferência dos números com o site do Banco Central será feita na etapa de validação do projeto.
 
-### 4.2. Classificação das expectativas
+## 7. Requisitos e como executar
 
-A classificação utiliza um limite provisório de 0,05 ponto percentual:
+É necessário ter o R instalado. A coleta precisa de acesso à internet. Os pacotes usados em cada etapa:
 
-- **Subiu:** variação superior a +0,05 p.p.
-- **Caiu:** variação inferior a −0,05 p.p.
-- **Estável:** variação entre −0,05 p.p. e +0,05 p.p., inclusive.
-
-A classificação é aplicada à variação da mediana das expectativas.
-
-Na primeira observação da comparação, a variação não é calculada por não existir uma observação anterior dentro do conjunto selecionado.
-
-### 4.3. Organização dos resultados
-
-Após os cálculos, o script organiza os resultados em uma tabela comparativa, utilizando o pacote `gt`.
-
-A tabela apresenta:
-
-- Indicador e período de referência;
-- Semana e data da divulgação anterior;
-- Semana e data da divulgação atual;
-- Mediana anterior e mediana atual;
-- Número de respondentes em cada divulgação;
-- Variação da mediana em pontos percentuais;
-- Variação do número de respondentes;
-- Classificação da tendência.
-
-## 5. Visualização da evolução semanal
-
-Além da comparação entre as duas semanas mais recentes, o script `02_tratamento.R` gera dois gráficos de evolução das expectativas:
-
-- **Gráfico do IPCA:** apresenta a evolução semanal das expectativas de inflação para 2026.
-- **Gráfico da Selic:** apresenta a evolução semanal das expectativas para a reunião R6/2028.
-
-Os gráficos são construídos com o pacote `ggplot2`, utilizando:
-
-- A data da divulgação no eixo horizontal;
-- A mediana da expectativa no eixo vertical;
-- Linhas para representar a evolução das expectativas;
-- Pontos para identificar cada observação semanal.
-
-Para essa visualização, são considerados os últimos 180 dias disponíveis na base. Dentro de cada semana, é selecionada a observação de data mais recente.
-
-## 6. Resultados da execução
-
-Na comparação entre 16 e 23 de outubro de 2026, os arquivos locais produziram os seguintes resultados:
-
-| Indicador | Mediana anterior | Mediana atual | Variação | Classificação |
-|---|---:|---:|---:|---|
-| IPCA — referência 2026 | 5,2190% | 5,1891% | −0,0299 p.p. | Estável |
-| Selic — R6/2028 | 10,50% | 10,25% | −0,25 p.p. | Caiu |
-
-**Variação do número de respondentes:**
-
-- **IPCA:** aumento de 5 respondentes, de 137 para 142.
-- **Selic:** aumento de 10 respondentes, de 95 para 105.
-
-Os resultados são referentes à execução registrada nesta etapa e não representam necessariamente as expectativas mais recentes disponíveis.
-
-## 7. Requisitos e dependências
-
-O projeto utiliza os seguintes pacotes:
-
-| Pacote | Finalidade |
+| Etapa | Pacotes |
 |---|---|
-| `rbcb` | Consulta às expectativas de mercado do Banco Central. |
-| `dplyr` | Manipulação, organização e tratamento dos dados. |
-| `gt` | Construção e formatação da tabela comparativa. |
-| `ggplot2` | Construção dos gráficos de evolução semanal. |
+| `01_coleta.R` | `rbcb`, `dplyr` |
+| `02_tratamento.R` | `dplyr` |
+| `03_visualizacao.R` | `dplyr`, `gt`, `ggplot2` |
 
-Para instalar os pacotes necessários, execute no R:
+Instale os pacotes uma vez, no Console do R:
 
 ```r
 install.packages(c("rbcb", "dplyr", "gt", "ggplot2"))
 ```
 
-A instalação precisa ser realizada apenas uma vez no ambiente R, salvo necessidade de reinstalação.
-
-## 8. Como executar o projeto
-
-Os scripts devem ser executados na ordem apresentada abaixo.
-
-### 8.1. Coleta dos dados
-
-No Positron, execute:
+Execute os scripts a partir da pasta do projeto, nesta ordem:
 
 ```r
-source("01_coleta.R")
+source("01_coleta.R")         # coleta e salva os dados em dados/
+source("02_tratamento.R")     # compara as semanas e salva em saidas/
+source("03_visualizacao.R")   # gera a tabela formatada e os gráficos
 ```
 
-Esse script consulta as expectativas de mercado do Banco Central e grava os arquivos CSV na pasta `dados/`.
+Quem só quiser gerar o aviso com os dados que já estão no repositório pode pular o `01_coleta.R` e não precisa do pacote `rbcb`.
 
-### 8.2. Tratamento e comparação
+Para testar a lógica com uma data passada, edite o parâmetro `data_corte` no início do `02_tratamento.R` (por exemplo, `"2026-10-23"`). Com `NULL`, o script usa a última data disponível.
 
-Após a coleta, execute:
+## 8. Observações sobre os dados
 
-```r
-source("02_tratamento.R")
-```
+- A base do IPCA tem uma coluna `IndicadorDetalhe` que vem vazia da fonte. Ela não é usada.
+- As bases contêm uma linha por dia útil. Nas verificações realizadas (`00_exploracao.R`), não há linhas repetidas nem semanas sem divulgação.
 
-Esse script importa os arquivos CSV e realiza o tratamento das bases. Ao final da execução, são geradas:
+## 9. Limitações da etapa atual
 
-- As tabelas de comparação semanal do IPCA e da Selic;
-- A tabela comparativa formatada com `gt`;
-- O gráfico de evolução semanal do IPCA;
-- O gráfico de evolução semanal da Selic.
-
-A coleta deve ser executada antes do tratamento para garantir que os arquivos utilizados estejam disponíveis e atualizados.
-
-## 9. Implementações realizadas e próximas etapas
-
-O projeto encontra-se em desenvolvimento. Até esta etapa, foram implementadas as seguintes funcionalidades:
-
-- Coleta das expectativas de mercado do IPCA e da Selic por meio da API do Banco Central;
-- Armazenamento das bases brutas em arquivos CSV;
-- Identificação das duas semanas mais recentes com observações disponíveis;
-- Seleção da última divulgação disponível em cada semana;
-- Cálculo da variação das medianas e do número de respondentes;
-- Classificação automática das alterações nas expectativas;
-- Geração de tabela comparativa formatada;
-- Construção de gráficos de evolução semanal dos indicadores.
-
-**Observações metodológicas:** a classificação utiliza um limite provisório de 0,05 p.p., que poderá ser revisto após a validação metodológica. A utilização de `baseCalculo == 0` também integra os critérios experimentais adotados nesta etapa.
-
-**Próximas etapas previstas:**
-
-- Aprimoramento da metodologia de tratamento e comparação;
-- Desenvolvimento da interpretação econômica dos resultados;
-- Elaboração do boletim econômico semanal;
-- Implementação de outras funcionalidades previstas para o projeto.
-
-A interpretação econômica e a elaboração do boletim ainda não fazem parte das funcionalidades implementadas nesta versão.
+O projeto está em desenvolvimento. A etapa atual cobre a coleta, a comparação e a visualização de IPCA e Selic. O limiar de 0,05 p.p. é provisório e pode ser revisto após a validação metodológica. A geração do texto automático e do documento em Quarto, a inclusão de PIB e câmbio e a validação com as publicações oficiais dependem das próximas etapas.
 
 ## 10. Referências
 
-BANCO CENTRAL DO BRASIL. **Sistema Expectativas de Mercado**. Dados do Relatório Focus. Disponível em: https://www.bcb.gov.br.
+Banco Central do Brasil. Sistema Expectativas de Mercado — dados do Relatório Focus.
 
-BANCO CENTRAL DO BRASIL. **API de Expectativas de Mercado**. Documentação da API Olinda. Disponível em: https://olinda.bcb.gov.br/olinda/servico/Expectativas/versao/v1/documentacao.
-
-PACOTE `rbcb`. Consulta de dados econômicos do Banco Central do Brasil.
+Pacote R `rbcb`: consulta de dados econômicos do Banco Central do Brasil.

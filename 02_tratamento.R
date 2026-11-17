@@ -1,7 +1,10 @@
-
 library(dplyr)
-library(gt)
-library(ggplot2)
+
+ano_ipca    <- 2026     
+limiar_pp   <- 0.05     
+data_corte  <- NULL
+                        
+
 
 ipca_raw <- read.csv("dados/ipca_raw.csv") |>
   mutate(Data = as.Date(Data))
@@ -9,248 +12,105 @@ ipca_raw <- read.csv("dados/ipca_raw.csv") |>
 selic_raw <- read.csv("dados/selic_raw.csv") |>
   mutate(Data = as.Date(Data))
 
-ultimas_divulgacoes <- function(dados) {
 
-  datas <- dados |>
-    distinct(Data) |>
-    filter(!is.na(Data)) |>
-    mutate(Semana = format(Data, "%G-%V")) |>
-    group_by(Semana) |>
-    summarise(
-      Data = max(Data),
-      .groups = "drop"
-    ) |>
-    arrange(desc(Data)) |>
-    slice_head(n = 2) |>
-    pull(Data)
+proxima_reuniao <- function(dados, data_max = NULL) {
+  dados <- dados |> filter(baseCalculo == 0)
 
-  if (length(datas) < 2) {
-    stop("Não existem duas semanas disponíveis para comparação.")
+  if (!is.null(data_max)) {
+    dados <- dados |> filter(Data <= as.Date(data_max))
   }
 
-  return(datas)
+  dados |>
+    group_by(Reuniao) |>
+    summarise(ultima_data = max(Data), .groups = "drop") |>
+    filter(ultima_data == max(ultima_data)) |>   
+    mutate(
+      ano    = as.integer(sub(".*/", "", Reuniao)),
+      numero = as.integer(sub("R(\\d+)/.*", "\\1", Reuniao))
+    ) |>
+    arrange(ano, numero) |>
+    slice_head(n = 1) |>                           
+    pull(Reuniao)
 }
 
-datas_ipca <- ipca_raw |>
-  filter(
-    DataReferencia == "2026",
-    baseCalculo == 0
-  ) |>
-  ultimas_divulgacoes()
+comparar_semanas <- function(dados, nome_indicador, referencia,
+                             data_max = NULL, limiar = 0.05) {
 
-ipca_comparacao <- ipca_raw |>
-  filter(
-    DataReferencia == "2026",
-    baseCalculo == 0,
-    Data %in% datas_ipca
-  ) |>
-  select(Data, DataReferencia, Mediana, numeroRespondentes) |>
-  arrange(Data) |>
-  mutate(
-    Semana = format(Data, "%V/%G"),
+  dados <- dados |> select(Data, Mediana, numeroRespondentes)
 
-    variacao_pp = Mediana - lag(Mediana),
+  if (!is.null(data_max)) {
+    dados <- dados |> filter(Data <= as.Date(data_max))
+  }
 
-    variacao_respondentes =
-      numeroRespondentes - lag(numeroRespondentes),
-
-    classificacao = case_when(
-      is.na(variacao_pp) ~ NA_character_,
-      variacao_pp > 0.05 ~ "subiu",
-      variacao_pp < -0.05 ~ "caiu",
-      TRUE ~ "estável"
-    )
-  )
-
-datas_selic <- selic_raw |>
-  filter(
-    Reuniao == "R6/2028",
-    baseCalculo == 0
-  ) |>
-  ultimas_divulgacoes()
-
-selic_comparacao <- selic_raw |>
-  filter(
-    Reuniao == "R6/2028",
-    baseCalculo == 0,
-    Data %in% datas_selic
-  ) |>
-  select(Data, Reuniao, Mediana, numeroRespondentes) |>
-  arrange(Data) |>
-  mutate(
-    Semana = format(Data, "%V/%G"),
-
-    variacao_pp = Mediana - lag(Mediana),
-
-    variacao_respondentes =
-      numeroRespondentes - lag(numeroRespondentes),
-
-    classificacao = case_when(
-      is.na(variacao_pp) ~ NA_character_,
-      variacao_pp > 0.05 ~ "subiu",
-      variacao_pp < -0.05 ~ "caiu",
-      TRUE ~ "estável"
-    )
-  )
-
-print(ipca_comparacao)
-print(selic_comparacao)
-# TABELA RESUMO DO IPCA
-tabela_ipca <- ipca_comparacao |>
-  summarise(
-    Indicador = "IPCA",
-    Referencia = as.character(first(DataReferencia)),
-
-    Semana_anterior = first(Semana),
-    Semana_atual = last(Semana),
-
-    Data_anterior = format(first(Data), "%d/%m/%Y"),
-    Data_atual = format(last(Data), "%d/%m/%Y"),
-
-    Mediana_anterior = first(Mediana),
-    Mediana_atual = last(Mediana),
-
-    Respondentes_anterior = first(numeroRespondentes),
-    Respondentes_atual = last(numeroRespondentes),
-
-    Variacao_pp = last(variacao_pp),
-    Variacao_respondentes = last(variacao_respondentes),
-
-    Tendencia = last(classificacao)
-  )
+  duas_semanas <- dados |>
+    mutate(Semana = format(Data, "%G-%V")) |>
+    group_by(Semana) |>
+    slice_max(Data, n = 1, with_ties = FALSE) |>
+    ungroup() |>
+    arrange(desc(Data)) |>
+    slice_head(n = 2) |>
+    arrange(Data)
 
 
-# TABELA RESUMO DA SELIC
-tabela_selic <- selic_comparacao |>
-  summarise(
-    Indicador = "Selic",
-    Referencia = first(Reuniao),
+  if (nrow(duas_semanas) < 2) {
+    warning(nome_indicador, " (", referencia,
+            "): não há duas divulgações disponíveis. Sem comparação.")
+    return(NULL)
+  }
 
-    Semana_anterior = first(Semana),
-    Semana_atual = last(Semana),
+  dias_entre <- as.numeric(diff(duas_semanas$Data))
+  if (dias_entre > 10) {
+    warning(nome_indicador, " (", referencia,
+            "): as duas últimas divulgações estão a ", dias_entre,
+            " dias uma da outra (não são consecutivas). Sem comparação.")
+    return(NULL)
+  }
 
-    Data_anterior = format(first(Data), "%d/%m/%Y"),
-    Data_atual = format(last(Data), "%d/%m/%Y"),
-
-    Mediana_anterior = first(Mediana),
-    Mediana_atual = last(Mediana),
-
-    Respondentes_anterior = first(numeroRespondentes),
-    Respondentes_atual = last(numeroRespondentes),
-
-    Variacao_pp = last(variacao_pp),
-    Variacao_respondentes = last(variacao_respondentes),
-
-    Tendencia = last(classificacao)
-  )
-
-
-# CONSOLIDAÇÃO DAS TABELAS
-tabela_comparativa <- bind_rows(
-  tabela_ipca,
-  tabela_selic
-) |>
-  gt() |>
-  tab_header(
-    title = "Boletim Focus — Comparativo semanal",
-    subtitle = "Última semana disponível versus semana anterior disponível"
-  ) |>
-  cols_label(
-    Indicador = "Indicador",
-    Referencia = "Referência",
-    Semana_anterior = "Semana anterior",
-    Semana_atual = "Semana atual",
-    Data_anterior = "Data anterior",
-    Data_atual = "Data atual",
-    Mediana_anterior = "Mediana anterior (%)",
-    Mediana_atual = "Mediana atual (%)",
-    Respondentes_anterior = "Respondentes anteriores",
-    Respondentes_atual = "Respondentes atuais",
-    Variacao_pp = "Variação (p.p.)",
-    Variacao_respondentes = "Variação de respondentes",
-    Tendencia = "Tendência"
-  ) |>
-  fmt_number(
-    columns = c(
+  duas_semanas |>
+    mutate(
+      Data_anterior         = lag(Data),
+      Mediana_anterior      = lag(Mediana),
+      Respondentes_anterior = lag(numeroRespondentes),
+      Variacao_pp           = round(Mediana - Mediana_anterior, 4),
+      Tendencia = case_when(
+        Variacao_pp >  limiar ~ "subiu",
+        Variacao_pp < -limiar ~ "caiu",
+        TRUE                  ~ "estável"
+      )
+    ) |>
+    slice_tail(n = 1) |>
+    transmute(
+      Indicador = nome_indicador,
+      Referencia = referencia,
+      Data_anterior,
+      Data_atual = Data,
       Mediana_anterior,
-      Mediana_atual,
-      Variacao_pp
-    ),
-    decimals = 4
-  ) |>
-  fmt_number(
-    columns = c(
+      Mediana_atual = Mediana,
+      Variacao_pp,
       Respondentes_anterior,
-      Respondentes_atual,
-      Variacao_respondentes
-    ),
-    decimals = 0
-  )
+      Respondentes_atual = numeroRespondentes,
+      Tendencia
+    )
+}
 
-print(tabela_comparativa)
+dados_ipca <- ipca_raw |>
+  filter(as.character(DataReferencia) == as.character(ano_ipca),
+         baseCalculo == 0)
 
-ipca_semanal <- ipca_raw |>
-  filter(
-    DataReferencia == "2026",
-    baseCalculo == 0,
-    Data >= Sys.Date() - 180
-  ) |>
-  mutate(Semana = format(Data, "%G-%V")) |>
-  group_by(Semana) |>
-  slice_max(
-    order_by = Data,
-    n = 1,
-    with_ties = FALSE
-  ) |>
-  ungroup() |>
-  arrange(Data)
+tabela_ipca <- comparar_semanas(dados_ipca, "IPCA", as.character(ano_ipca),
+                                data_corte, limiar_pp)
 
-grafico_ipca <- ggplot(
-  data = ipca_semanal,
-  mapping = aes(x = Data, y = Mediana)
-) +
-  geom_line(linewidth = 1) +
-  geom_point(size = 2) +
-  labs(
-    title = "Evolução semanal das expectativas do IPCA",
-    subtitle = "Referência: 2026 | Última atualização de cada semana",
-    x = "Data da divulgação",
-    y = "Mediana da expectativa (%)",
-    caption = "Fonte: Banco Central do Brasil — Boletim Focus"
-  ) +
-  theme_minimal()
+reuniao_selic <- proxima_reuniao(selic_raw, data_corte)
 
-print(grafico_ipca)
+dados_selic <- selic_raw |>
+  filter(Reuniao == reuniao_selic, baseCalculo == 0)
 
-selic_semanal <- selic_raw |>
-  filter(
-    Reuniao == "R6/2028",
-    baseCalculo == 0,
-    Data >= Sys.Date() - 180
-  ) |>
-  mutate(Semana = format(Data, "%G-%V")) |>
-  group_by(Semana) |>
-  slice_max(
-    order_by = Data,
-    n = 1,
-    with_ties = FALSE
-  ) |>
-  ungroup() |>
-  arrange(Data)
+tabela_selic <- comparar_semanas(dados_selic, "Selic", reuniao_selic,
+                                 data_corte, limiar_pp)
 
-grafico_selic <- ggplot(
-  selic_semanal,
-  aes(x = Data, y = Mediana)
-) +
-  geom_line(linewidth = 1) +
-  geom_point(size = 2) +
-  labs(
-    title = "Evolução semanal das expectativas da Selic",
-    subtitle = "Referência: reunião R6/2028 | Última atualização de cada semana",
-    x = "Data da divulgação",
-    y = "Mediana da expectativa (%)",
-    caption = "Fonte: Banco Central do Brasil — Boletim Focus"
-  ) +
-  theme_minimal()
+tabela_comparativa <- bind_rows(tabela_ipca, tabela_selic)
+print(as.data.frame(tabela_comparativa))
 
-print(grafico_selic)
+dir.create("saidas", showWarnings = FALSE)
+write.csv(tabela_comparativa, "saidas/comparacao_semanal.csv",
+          row.names = FALSE)
