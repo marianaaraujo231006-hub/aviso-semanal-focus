@@ -1,12 +1,11 @@
 ---
-title: "Aviso Semanal Focus — Boletim Automatizado"
+title: "Aviso Semanal Focus — Boletim"
 subtitle: "REC3302 — Introdução a R (FEA-RP/USP)"
 format:
   html:
     theme: cosmo
     toc: true
     toc-title: "Sumário"
-    code-fold: true
     embed-resources: true
 lang: pt-BR
 execute:
@@ -16,77 +15,51 @@ execute:
 ---
 
 ```{r setup}
-source('03_automatização.R')
+
+source("04_boletim.R")
 ```
 
-## 1. Destaques da Semana
+## 1. Destaques da semana
 
 `r textos_focus$abertura`
 
-```{r frases_automaticas, results='asis'}
-for (f in textos_focus$frases) {
-  cat(gsub('^• ', '- ', f), '\n')
+```{r frases, results='asis'}
+cat("\n")
+cat(paste0("- ", textos_focus$frases), sep = "\n")
+cat("\n")
+```
+
+## 2. Tabela comparativa
+
+```{r tabela}
+montar_tabela_gt(comparacao)
+```
+
+## 3. Evolução semanal das expectativas
+
+```{r graficos, results='asis'}
+cat("::: {.panel-tabset}\n\n")
+for (indicador in comparacao$Indicador) {
+  cat("### ", indicador, "\n\n", sep = "")
+  cat("![](", arquivo_grafico(indicador), "){width=100%}\n\n", sep = "")
 }
+cat(":::\n")
 ```
 
-## 2. Tabela Comparativa
+## 4. Metodologia
 
-```{r tabela_comparativa}
-tabela_comparativa
-```
+- Para cada indicador, o boletim compara a **última divulgação de cada uma das duas semanas mais recentes**, desde que sejam consecutivas.
+- **Variação = mediana atual − mediana anterior.**
+- A tendência é **subiu** se a variação for maior que o limite de estabilidade, **caiu** se for menor que o limite negativo, e **estável** caso contrário.
+- Todas as análises usam `baseCalculo == 0`.
+- Fonte: Banco Central do Brasil, Sistema Expectativas de Mercado (Relatório Focus).
 
-## 3. Evolução Semanal das Expectativas
-
-::: {.panel-tabset}
-
-### IPCA
-
-```{r grafico_ipca, fig.width=8, fig.height=4.5}
-grafico_ipca
-```
-
-### Selic
-
-```{r grafico_selic, fig.width=8, fig.height=4.5}
-grafico_selic
-```
-
-```{r graficos_extras, results='asis', fig.width=8, fig.height=4.5}
-if (!is.null(grafico_pib)) {
-  cat('### PIB Total\n\n')
-  print(grafico_pib)
-  cat('\n\n')
-}
-if (!is.null(grafico_cambio)) {
-  cat('### Câmbio\n\n')
-  print(grafico_cambio)
-  cat('\n\n')
-}
-```
-
-:::
-
-## 4. Parâmetros e Ajustes Metodológicos
-
-```{r tabela_parametros}
-data.frame(
-  Parametro = c(
-    'Ano de referência (indicadores anuais)',
-    'Reunião de referência da Selic',
-    'Base de cálculo (0 = 30 dias, 1 = 5 dias)',
-    'Limite de estabilidade — taxas (p.p.)',
-    'Limite de estabilidade — câmbio (R$)',
-    'Janela histórica dos gráficos (dias)'
-  ),
-  Valor_Atual = c(
-    as.character(ANO_REF_ANUAL),
-    as.character(REUNIAO_REF_SELIC),
-    as.character(BASE_CALCULO),
-    fmt_br(LIMITE_ESTABILIDADE_PP, 2),
-    fmt_br(LIMITE_ESTABILIDADE_BRL, 2),
-    as.character(JANELA_DIAS_GRAFICO)
-  )
-) |>
-  gt() |>
-  cols_label(Parametro = 'Parâmetro configurável', Valor_Atual = 'Valor utilizado')
+```{r parametros}
+comparacao |>
+  transmute(
+    Indicador,
+    `Referência` = Referencia,
+    `Limite de estabilidade` = paste(fmt_br(Limiar, 2), Unidade)
+  ) |>
+  gt::gt()
 ```

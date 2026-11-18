@@ -1,3 +1,5 @@
-"Indicador","Referencia","Data_anterior","Data_atual","Mediana_anterior","Mediana_atual","Variacao_pp","Respondentes_anterior","Respondentes_atual","Tendencia"
-"IPCA","2026",2026-11-06,2026-11-13,5.2195,5.1082,-0.1113,146,146,"caiu"
-"Selic","R8/2026",2026-11-06,2026-11-13,13.75,13.75,0,144,144,"estável"
+"Indicador","Referencia","Unidade","Limiar","Data_anterior","Data_atual","Mediana_anterior","Mediana_atual","Variacao","Respondentes_anterior","Respondentes_atual","Variacao_respondentes","Tendencia"
+"IPCA","2026","%",0.05,2026-11-06,2026-11-13,5.2195,5.1082,-0.1113,146,146,0,"caiu"
+"Selic","R8/2026","%",0.05,2026-11-06,2026-11-13,13.75,13.75,0,144,144,0,"estável"
+"PIB Total","2026","%",0.05,2026-11-06,2026-11-13,1.7546,1.7215,-0.0331,118,119,1,"estável"
+"Câmbio","2026","R$/US$",0.02,2026-11-06,2026-11-13,5.35,5.4,0.05,122,121,-1,"subiu"
