@@ -3,17 +3,39 @@ library(dplyr)
 
 data_inicio <- "2026-01-01"
 
-ipca_raw <- get_market_expectations(
-  type = "annual",
-  indic = "IPCA",
-  start_date = data_inicio
-)
-
-selic_raw <- get_market_expectations(
-  type = "selic",
-  start_date = data_inicio
-)
-
 dir.create("dados", showWarnings = FALSE)
-write.csv(ipca_raw, "dados/ipca_raw.csv", row.names = FALSE)
-write.csv(selic_raw, "dados/selic_raw.csv", row.names = FALSE)
+
+consultas <- list(
+  ipca   = list(type = "annual", indic = "IPCA"),
+  pib    = list(type = "annual", indic = "PIB Total"),
+  cambio = list(type = "annual", indic = "C\u00e2mbio"),
+  selic  = list(type = "selic")
+)
+
+coletar <- function(consulta) {
+  args <- c(consulta, list(start_date = data_inicio))
+  do.call(get_market_expectations, args)
+}
+
+for (nome in names(consultas)) {
+  arquivo <- file.path("dados", paste0(nome, "_raw.csv"))
+
+  dados <- tryCatch(
+    coletar(consultas[[nome]]),
+    error = function(e) {
+      warning("Falha ao coletar '", nome, "': ", conditionMessage(e),
+              call. = FALSE)
+      NULL
+    }
+  )
+
+  if (is.null(dados) || nrow(dados) == 0) {
+    warning("'", nome, "': sem dados coletados. Arquivo anterior mantido.",
+            call. = FALSE)
+    next
+  }
+
+  write.csv(dados, arquivo, row.names = FALSE)
+  message(nome, ": ", nrow(dados), " linhas | última divulgação: ",
+          max(as.Date(dados$Data)))
+}
